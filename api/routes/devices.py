@@ -1,8 +1,11 @@
 import logging
+from datetime import datetime, timezone
+import aiosqlite
 from fastapi import APIRouter, HTTPException, status, Depends, Body
 from pydantic import BaseModel, Field
 from devices.manager import DeviceManager, DeviceNotFoundError
 from creds.manager import CredentialManager
+from integrations.aquawiz import AquaWizIntegration, AquaWizIntegrationError
 from api.routes.auth import require_auth
 from config import DATABASE_PATH
 
@@ -65,7 +68,8 @@ class DeviceTestResponse(BaseModel):
 # ─── Helpers ───────────────────────────────────────────────────────────────
 
 async def _enrich_device(device: dict) -> dict:
-    meta = await cred_mgr.get_metadata(device["id"])
+    cred_ref = device.get("credential_ref")
+    meta = await cred_mgr.get_metadata_by_ref(cred_ref) if cred_ref else None
     device["_credentials_configured"] = bool(meta and meta.get("configured"))
     return device
 
@@ -147,7 +151,20 @@ async def test_device_connection(device_id: str, _: dict = Depends(require_auth)
     if cred_ref:
         secrets = await cred_mgr.get_secrets(cred_ref) or {}
 
-    # Integration test - honest "not implemented" for Phase 1B
+    integration = (device.get("integration") or "").lower()
+    config = device.get("config") or {}
+    serial = config.get("serial", "")
+    device_type = config.get("device_type", "")
+
+    if integration == "aquawiz":
+        try:
+            result = await AquaWizIntegration().test_connection(secrets, device_serial=serial, device_type=device_type)
+        except AquaWizIntegrationError as e:
+            result = {"success": False, "message": str(e), "details": None}
+        if cred_ref:
+            await cred_mgr.mark_tested(cred_ref, result.get("success", False), result.get("message", ""))
+        return DeviceTestResponse(**result)
+
     result = {
         "success": False,
         "message": f"{device.get('integration', 'Unknown').title()} integration not yet implemented",
@@ -174,6 +191,18 @@ async def update_credentials(device_id: str, payload: dict = Body(...), _: dict 
     secrets = {k: v for k, v in payload.items() if v}
     if secrets:
         await cred_mgr.store_secrets(cred_ref, secrets)
+    # Ensure metadata row exists (handles legacy devices created before metadata was tracked)
+    meta = await cred_mgr.get_metadata_by_ref(cred_ref)
+    if not meta:
+        now = datetime.now(timezone.utc).isoformat()
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            await db.execute(
+                """INSERT INTO device_credentials
+                (credential_ref, device_id, credential_type, configured, created_at, updated_at)
+                VALUES (?, ?, 'password', 1, ?, ?)""",
+                (cred_ref, device_id, now, now),
+            )
+            await db.commit()
     return {"status": "ok", "credential_ref": cred_ref}
 
 
@@ -188,7 +217,7 @@ async def get_credentials_status(device_id: str, _: dict = Depends(require_auth)
     if not cred_ref:
         return {"configured": False}
 
-    meta = await cred_mgr.get_metadata(device_id)
+    meta = await cred_mgr.get_metadata_by_ref(cred_ref)
     if not meta:
         return {"configured": False}
 

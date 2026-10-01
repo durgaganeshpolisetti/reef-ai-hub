@@ -85,6 +85,23 @@ class DeviceManager:
             await db.commit()
         return await self.get_device(device_id)
 
+    async def find_by_integration(self, integration: str, serial: str) -> dict | None:
+        """Find an existing device by integration type + serial in config."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await self._row_factory(db)
+            cursor = await db.execute(
+                "SELECT * FROM devices WHERE integration = ? AND config LIKE ?",
+                (integration, f'%"{serial}"%'),
+            )
+            row = await cursor.fetchone()
+        if row is None:
+            return None
+        d = self._row_to_dict(row)
+        # Verify the serial actually matches (config is JSON)
+        if (d.get("config", {}).get("serial") or "").upper() == serial.upper():
+            return d
+        return None
+
     async def delete_device(self, device_id: str) -> None:
         async with aiosqlite.connect(self.db_path) as db:
             await self._row_factory(db)

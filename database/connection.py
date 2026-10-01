@@ -5,7 +5,7 @@ from config import DATABASE_PATH
 
 logger = logging.getLogger("reef_ai_hub.database")
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 CREATE_DEVICES = """
 CREATE TABLE IF NOT EXISTS devices (
@@ -124,12 +124,30 @@ CREATE TABLE IF NOT EXISTS connection_history (
 );
 """
 
+CREATE_AQUAWIZ_DATA = """
+CREATE TABLE IF NOT EXISTS aquawiz_data (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id       TEXT NOT NULL REFERENCES devices(id),
+    serial          TEXT NOT NULL,
+    reading_time    TEXT NOT NULL,
+    kh              REAL,
+    ph              REAL,
+    kh_dosing       INTEGER,
+    kh_target       REAL,
+    delta_kh        REAL,
+    co2_bubbles     INTEGER,
+    created_at      TEXT NOT NULL
+);
+"""
+
 CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_telemetry_device_param ON telemetry(device_id, parameter_name, timestamp);",
     "CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp);",
     "CREATE INDEX IF NOT EXISTS idx_alerts_read ON alerts(read);",
     "CREATE INDEX IF NOT EXISTS idx_connection_history_device ON connection_history(device_id, timestamp);",
     "CREATE INDEX IF NOT EXISTS idx_api_users_username ON api_users(username);",
+    "CREATE INDEX IF NOT EXISTS idx_aquawiz_data_device_time ON aquawiz_data(device_id, reading_time);",
+    "CREATE INDEX IF NOT EXISTS idx_aquawiz_data_serial ON aquawiz_data(serial);",
 ]
 
 
@@ -142,10 +160,38 @@ async def init_database(db_path: str | None = None):
         for stmt in [
             CREATE_DEVICES, CREATE_DEVICE_CREDENTIALS, CREATE_API_USERS,
             CREATE_TELEMETRY, CREATE_ALERTS, CREATE_COMMANDS, CREATE_EQUIPMENT,
-            CREATE_CONNECTION_HISTORY,
+            CREATE_CONNECTION_HISTORY, CREATE_AQUAWIZ_DATA,
         ]:
             await db.execute(stmt)
         for idx in CREATE_INDEXES:
             await db.execute(idx)
         await db.commit()
     logger.info("Database initialized at %s", db_path)
+
+
+async def migrate_remove_access_tokens(db_path: str | None = None) -> int:
+    """Remove access_token keys from device config JSONs.
+
+    This is a one-time migration for devices that had access_token stored
+    in config (before the credential-vault-only architecture). Returns the
+    number of rows updated.
+    """
+    import json
+    db_path = db_path or DATABASE_PATH
+    updated = 0
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute("PRAGMA foreign_keys=ON")
+        cursor = await db.execute("SELECT id, config FROM devices WHERE config LIKE '%access_token%'")
+        rows = await cursor.fetchall()
+        for device_id, config_json in rows:
+            config = json.loads(config_json)
+            if "access_token" in config:
+                del config["access_token"]
+                await db.execute(
+                    "UPDATE devices SET config = ? WHERE id = ?",
+                    (json.dumps(config), device_id),
+                )
+                updated += 1
+        await db.commit()
+    logger.info("Migrated %d device(s): removed access_token from config", updated)
+    return updated
