@@ -612,6 +612,24 @@ Before any manual database cleanup:
 
 create a backup first.
 
+## Project Memory Accuracy Rule
+
+`CLAUDE.md` and `docs/PROJECT_STATUS.md` are project context and historical guidance, not authoritative truth.
+
+Always verify important claims against the current code, tests, database schema, API contracts, Git state, and observable behavior.
+
+If any project memory conflicts with verified current behavior:
+
+1. Do not silently follow the incorrect memory.
+2. Clearly report the discrepancy.
+3. Identify which source is inconsistent.
+4. Prefer verified current implementation/test evidence for the active task.
+5. Continue the requested task without silently changing the project plan.
+6. Do not rewrite project memory merely to make it agree with the current code.
+7. Recommend updating the memory file only after the discrepancy is understood and the relevant change is confirmed.
+
+Never invent missing information to reconcile conflicting project memory.
+
 
 
 \## Development Workflow

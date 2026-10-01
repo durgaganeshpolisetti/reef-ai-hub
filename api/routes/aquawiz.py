@@ -253,15 +253,7 @@ async def register_aquawiz_device(request: AquaWizRegisterRequest, _: dict = Dep
             detail=f"AquaWiz {request.serial} is already registered",
         )
 
-    # Step 4: Store AquaWiz credentials in the Credential Vault
-    credential_ref = str(uuid.uuid4())
-    await _cred_mgr.store_secrets(credential_ref, {
-        "username": request.username,
-        "password": request.password,
-        "access_token": discover_result.get("access_token", ""),
-    })
-
-    # Step 5: Create the device record
+    # Step 4: Create the device record first (needed for device_id in credentials)
     # NOTE: access_token is stored in the Credential Vault only - never in devices.config
     device_data = {
         "name": f"AquaWiz {request.serial}",
@@ -276,6 +268,14 @@ async def register_aquawiz_device(request: AquaWizRegisterRequest, _: dict = Dep
         },
     }
     device = await _mgr.create_device(device_data)
+
+    # Step 5: Store AquaWiz credentials in the Credential Vault and link to device
+    credential_ref = str(uuid.uuid4())
+    await _cred_mgr.store_secrets(credential_ref, {
+        "username": request.username,
+        "password": request.password,
+        "access_token": discover_result.get("access_token", ""),
+    }, device_id=device["id"])
 
     # Step 6: Link credential_ref to the device
     await _mgr.update_device(device["id"], {"credential_ref": credential_ref})

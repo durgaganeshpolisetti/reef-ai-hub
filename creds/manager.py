@@ -40,15 +40,15 @@ class CredentialManager:
             await db.commit()
         return await self.get_metadata_by_ref(credential_ref)
 
-    async def store_secrets(self, credential_ref: str, secrets: dict) -> None:
+    async def store_secrets(self, credential_ref: str, secrets: dict, device_id: str = None) -> None:
         vault.store(credential_ref, secrets)
         now = datetime.now(timezone.utc).isoformat()
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 """INSERT OR IGNORE INTO device_credentials
-                (credential_ref, credential_type, configured, created_at, updated_at)
-                VALUES (?, 'password', 0, ?, ?)""",
-                (credential_ref, now, now),
+                (credential_ref, device_id, credential_type, configured, created_at, updated_at)
+                VALUES (?, ?, 'password', 0, ?, ?)""",
+                (credential_ref, device_id, now, now),
             )
             await db.execute(
                 "UPDATE device_credentials SET configured = 1, updated_at = ? WHERE credential_ref = ?",
@@ -64,9 +64,9 @@ class CredentialManager:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 """INSERT OR IGNORE INTO device_credentials
-                (credential_ref, credential_type, configured, created_at, updated_at)
-                VALUES (?, 'password', 0, ?, ?)""",
-                (credential_ref, now, now),
+                (credential_ref, device_id, credential_type, configured, created_at, updated_at)
+                VALUES (?, ?, 'password', 0, ?, ?)""",
+                (credential_ref, None, now, now),
             )
             await db.execute(
                 "UPDATE device_credentials SET last_tested_at = ?, last_test_result = ?, updated_at = ? WHERE credential_ref = ?",
