@@ -4,6 +4,7 @@ Run with: python -m pytest integrations/test_aquawiz.py -v
 """
 
 import pytest
+import unittest.mock as mock
 from datetime import datetime, timezone
 
 from integrations.aquawiz import (
@@ -12,6 +13,7 @@ from integrations.aquawiz import (
     _parse_timestamp,
     _telemetry,
     AquaWizIntegration,
+    AquaWizIntegrationError,
 )
 # ─── _safe_div ──────────────────────────────────────────────────────────────
 
@@ -276,3 +278,70 @@ class TestDeviceTypeDetection:
     def test_missing_serial(self):
         integration = AquaWizIntegration()
         assert integration._detect_device_type({}) == "other"
+
+
+# ─── poll() access-token source regression ───────────────────────────────────
+
+class TestPollAccessTokenSource:
+    """Regression tests ensuring poll() reads access_token from secrets, not config."""
+
+    def _make_response_mock(self, status, json_data):
+        m = mock.MagicMock()
+        m.status = status
+        m.__aenter__ = mock.AsyncMock(return_value=m)
+        m.__aexit__ = mock.AsyncMock(return_value=False)
+        m.json = mock.AsyncMock(return_value=json_data)
+        return m
+
+    def _make_session(self, poll_status=200, poll_json=None):
+        if poll_json is None:
+            poll_json = {"latest_kh": 7566, "latest_time": 1727272140000}
+        session = mock.MagicMock()
+        session.__aenter__ = mock.AsyncMock(return_value=session)
+        session.__aexit__ = mock.AsyncMock(return_value=False)
+        poll_resp = self._make_response_mock(poll_status, poll_json)
+        session.post = mock.Mock(return_value=poll_resp)
+        return session
+
+    @pytest.mark.asyncio
+    async def test_poll_reads_token_from_secrets_not_config(self):
+        """Token in secrets is used; config need not carry it."""
+        integration = AquaWizIntegration()
+        mock_session = self._make_session(poll_json={
+            "latest_kh": 7566, "latest_time": 1727272140000,
+        })
+        with mock.patch("integrations.aquawiz.aiohttp.ClientSession") as mock_cls:
+            mock_cls.return_value = mock_session
+            result = await integration.poll(
+                device_id="KH1-00-02544",
+                secrets={"username": "u", "password": "p", "access_token": "tok-from-secrets"},
+                config={"serial": "KH1-00-02544", "device_type": "kh"},
+            )
+        names = {r["parameter_name"]: r for r in result}
+        assert "kh" in names
+        assert mock_session.post.called
+        call_args = mock_session.post.call_args
+        body = call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs.get("json", {})
+        assert body["token"]["access_token"] == "tok-from-secrets"
+
+    @pytest.mark.asyncio
+    async def test_poll_fails_when_no_token_in_secrets(self):
+        """Missing access_token in secrets raises an error."""
+        integration = AquaWizIntegration()
+        with pytest.raises(AquaWizIntegrationError, match="Missing credentials or access token"):
+            await integration.poll(
+                device_id="KH1-00-02544",
+                secrets={"username": "u", "password": "p"},
+                config={"serial": "KH1-00-02544", "device_type": "kh"},
+            )
+
+    @pytest.mark.asyncio
+    async def test_poll_token_in_config_only_does_not_work(self):
+        """If token is only in config (not secrets), poll must raise — config is not the source."""
+        integration = AquaWizIntegration()
+        with pytest.raises(AquaWizIntegrationError, match="Missing credentials or access token"):
+            await integration.poll(
+                device_id="KH1-00-02544",
+                secrets={"username": "u", "password": "p"},
+                config={"serial": "KH1-00-02544", "device_type": "kh", "access_token": "tok-in-config-only"},
+            )

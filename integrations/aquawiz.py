@@ -222,7 +222,7 @@ class AquaWizIntegration:
         """
         username = secrets.get("username", "")
         password = secrets.get("password", "")
-        access_token = config.get("access_token", "")
+        access_token = secrets.get("access_token", "")
         if not username or not password or not access_token:
             raise AquaWizIntegrationError("Missing credentials or access token")
 

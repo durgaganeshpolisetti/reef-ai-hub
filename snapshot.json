@@ -1,0 +1,72 @@
+{
+    "timestamp": 1790880777.8621948,
+    "devices": [
+        {
+            "id": "d76d6d030556c91625uwwn",
+            "ip": "192.168.0.208",
+            "active": 2,
+            "encrypt": true,
+            "productKey": "B0eP8qYAdpUo4yR9",
+            "token": true,
+            "wf_cfg": true,
+            "name": "",
+            "key": "",
+            "mac": "",
+            "ability": 0,
+            "dev_type": "default",
+            "origin": "broadcast",
+            "ver": "3.4"
+        },
+        {
+            "id": "d7d0edf774ddd67c4ak02o",
+            "ip": "192.168.0.200",
+            "uuid": "9e8f450b5c70e257",
+            "active": 2,
+            "encrypt": true,
+            "productKey": "keykmm3rjyqy5r8p",
+            "token": true,
+            "wf_cfg": true,
+            "sl": 0,
+            "clientLink": 3,
+            "name": "",
+            "key": "",
+            "mac": "",
+            "ability": 0,
+            "dev_type": "default",
+            "origin": "broadcast",
+            "ver": "3.5"
+        },
+        {
+            "id": "d720b838060f72c4be2e7t",
+            "ip": "192.168.0.131",
+            "active": 2,
+            "encrypt": true,
+            "productKey": "keyjup78v54myhan",
+            "token": true,
+            "wf_cfg": true,
+            "name": "",
+            "key": "",
+            "mac": "",
+            "ability": 0,
+            "dev_type": "default",
+            "origin": "broadcast",
+            "ver": "3.4"
+        },
+        {
+            "id": "d70e6d404b3cc940a1x4fa",
+            "ip": "192.168.0.207",
+            "active": 2,
+            "encrypt": true,
+            "productKey": "keyjup78v54myhan",
+            "name": "",
+            "key": "",
+            "mac": "",
+            "ability": 0,
+            "token": "",
+            "wf_cfg": "",
+            "dev_type": "default",
+            "origin": "broadcast",
+            "ver": "3.3"
+        }
+    ]
+}

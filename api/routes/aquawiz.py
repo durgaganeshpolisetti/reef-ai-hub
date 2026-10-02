@@ -76,6 +76,8 @@ class AquaWizDeviceInfo(BaseModel):
     deviceType: str
     serial: str
     name: str
+    model: str = ""
+    brand: str = ""
     enabled: bool
     credentialsConfigured: bool
     lastPollSuccess: str | None = None
